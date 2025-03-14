@@ -370,7 +370,7 @@ def highlight_extracted_fields(front_image, back_image):
                 positions["box_start"],
                 positions["box_end"],
                 (0, 0, 255),  # Red border
-                2,  # Border thickness
+                2,
             )
 
     # Convert back to PIL images
