@@ -235,7 +235,7 @@ def detect_and_label_citizenship_document(image, side="front"):
     blurred = cv2.GaussianBlur(gray, (7, 7), 0)
 
     # Adjust Canny parameters
-    edges = cv2.Canny(blurred, 30, 200)  # Modified thresholds
+    edges = cv2.Canny(blurred, 30, 200)
 
     # Find contours
     contours, _ = cv2.findContours(edges, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
@@ -260,7 +260,6 @@ def detect_and_label_citizenship_document(image, side="front"):
 
         # Draw labels and boxes with unicode font support
         for field, positions in fields.items():
-            # Draw the label with a better font
             img_pil = Image.fromarray(result)
             draw = ImageDraw.Draw(img_pil)
 
@@ -271,13 +270,11 @@ def detect_and_label_citizenship_document(image, side="front"):
                 )
             except:
                 try:
-                    # Try alternative font paths
                     font = ImageFont.truetype(
                         "/usr/share/fonts/truetype/noto/NotoSansDevanagari-Regular.ttf",
                         32,
                     )
                 except:
-                    # Fallback to default font
                     font = ImageFont.load_default()
 
             draw.text(positions["label_pos"], field, font=font, fill=(255, 0, 0))
@@ -288,19 +285,17 @@ def detect_and_label_citizenship_document(image, side="front"):
                 result,
                 positions["box_start"],
                 positions["box_end"],
-                (0, 0, 255),  # Red color for boxes
+                (0, 0, 255),
                 2,
             )
 
             # Add field name inside or near the box for clarity
-            # Convert back to PIL for text
             img_pil = Image.fromarray(result)
             draw = ImageDraw.Draw(img_pil)
             label_inside_pos = (
                 positions["box_start"][0] + 10,
                 positions["box_start"][1] + 5,
             )
-            # Draw with white background for better visibility
             text_w, text_h = draw.textbbox((0, 0), field, font=font)[2:]
             draw.rectangle(
                 [
@@ -328,52 +323,41 @@ def highlight_extracted_fields(front_image, back_image):
     Function to create a visualization of exactly where data is being extracted.
     This provides a clearer highlight of the extraction areas.
     """
-    # Process images
     front_img = cv2.cvtColor(np.array(front_image), cv2.COLOR_RGB2BGR)
     back_img = cv2.cvtColor(np.array(back_image), cv2.COLOR_RGB2BGR)
 
-    # Apply preprocessing to correct orientation and aspect ratio
     front_img = preprocess_image(front_img)
     back_img = preprocess_image(back_img)
 
-    # Get dimensions
     front_height, front_width = front_img.shape[:2]
     back_height, back_width = back_img.shape[:2]
 
-    # Create overlay images with transparent background
     front_overlay = front_img.copy()
     back_overlay = back_img.copy()
 
-    # Get field positions
     front_fields = calculate_field_positions(front_width, front_height)
     back_fields = calculate_back_field_positions(back_width, back_height)
 
-    # Create highlighted version with semi-transparent overlay
     for fields, img in [(front_fields, front_overlay), (back_fields, back_overlay)]:
         for field, positions in fields.items():
-            # Draw a filled rectangle with transparency for better visibility
             overlay = img.copy()
             cv2.rectangle(
                 overlay,
                 positions["box_start"],
                 positions["box_end"],
-                (0, 255, 0),  # Green fill for extraction areas
-                -1,  # Fill the rectangle
+                (0, 255, 0),
+                -1,
             )
-            # Apply the overlay with transparency
-            alpha = 0.4  # Transparency factor
+            alpha = 0.4
             cv2.addWeighted(overlay, alpha, img, 1 - alpha, 0, img)
-
-            # Add a solid border
             cv2.rectangle(
                 img,
                 positions["box_start"],
                 positions["box_end"],
-                (0, 0, 255),  # Red border
+                (0, 0, 255),
                 2,
             )
 
-    # Convert back to PIL images
     highlighted_front = Image.fromarray(cv2.cvtColor(front_overlay, cv2.COLOR_BGR2RGB))
     highlighted_back = Image.fromarray(cv2.cvtColor(back_overlay, cv2.COLOR_BGR2RGB))
 
@@ -383,54 +367,38 @@ def highlight_extracted_fields(front_image, back_image):
 def format_extracted_text(text):
     """Format the extracted text into a clean structure"""
     template = """
-## Citizenship Certificate Information
+Citizenship Certificate Information
 
-**Personal Details**
-- **Full Name (नाम थर)**: {full_name}
-- **Father's Name (बुवाको नाम)**: {father_name}
-- **Mother's Name (आमाको नाम)**: {mother_name}
-- **Gender (लिङ्ग)**: {gender}
+Personal Details:
+- Full Name (नाम थर): {full_name}
+- Father's Name (बुवाको नाम): {father_name}
+- Mother's Name (आमाको नाम): {mother_name}
+- Gender (लिङ्ग): {gender}
 
-**Document Details**
-- **Citizenship Number (नागरिकता नं)**: {citizenship_no}
-- **Permanent Address (स्थायी ठेगाना)**: {address}
-- **Date of Birth (जन्म मिति)**: {dob}
-- **Place of Birth (जन्म स्थान)**: {birth_place}
-- **Issue Date (जारी मिति)**: {issue_date}
-- **Issuing Authority (जारी गर्ने अधिकारी)**: {authority}
-- **Spouse's Name (पति/पत्नीको नाम)**: {spouse_name}
+Document Details:
+- Citizenship Number (नागरिकता नं): {citizenship_no}
+- Permanent Address (स्थायी ठेगाना): {address}
+- Date of Birth (जन्म मिति): {dob}
+- Place of Birth (जन्म स्थान): {birth_place}
+- Issue Date (जारी मिति): {issue_date}
+- Issuing Authority (जारी गर्ने अधिकारी): {authority}
+- Spouse's Name (पति/पत्नीको नाम): {spouse_name}
 """
-
-    # Extract data with regex
     extracted = {
         "full_name": extract_field(text, r"(?:नाम थर|Full Name)[:\s]*(.*?)(?:\n|$)"),
-        "father_name": extract_field(
-            text, r"(?:बुवाको नाम|Father's Name)[:\s]*(.*?)(?:\n|$)"
-        ),
-        "mother_name": extract_field(
-            text, r"(?:आमाको नाम|Mother's Name)[:\s]*(.*?)(?:\n|$)"
-        ),
+        "father_name": extract_field(text, r"(?:बुवाको नाम|Father's Name)[:\s]*(.*?)(?:\n|$)"),
+        "mother_name": extract_field(text, r"(?:आमाको नाम|Mother's Name)[:\s]*(.*?)(?:\n|$)"),
         "dob": extract_field(text, r"(?:जन्म मिति|Date of Birth)[:\s]*(.*?)(?:\n|$)"),
-        "birth_place": extract_field(
-            text, r"(?:जन्म स्थान|Place of Birth)[:\s]*(.*?)(?:\n|$)"
-        ),
+        "birth_place": extract_field(text, r"(?:जन्म स्थान|Place of Birth)[:\s]*(.*?)(?:\n|$)"),
         "gender": extract_field(text, r"(?:लिङ्ग|Gender)[:\s]*(.*?)(?:\n|$)"),
-        "citizenship_no": extract_field(
-            text, r"(?:नागरिकता नं|Citizenship Number)[:\s]*(.*?)(?:\n|$)"
-        ),
-        "address": extract_field(
-            text, r"(?:स्थायी ठेगाना|Permanent Address)[:\s]*(.*?)(?:\n|$)"
-        ),
-        "spouse_name": extract_field(
-            text, r"(?:पति/पत्नीको नाम|Spouse's Name)[:\s]*(.*?)(?:\n|$)"
-        ),
-        "issue_date": extract_field(
-            text, r"(?:जारी मिति|Issue Date)[:\s]*(.*?)(?:\n|$)"
-        ),
-        "authority": extract_field(
-            text, r"(?:जारी गर्ने अधिकारी|Issuing Authority)[:\s]*(.*?)(?:\n|$)"
-        ),
+        "citizenship_no": extract_field(text, r"(?:नागरिकता नं|Citizenship Number)[:\s]*(.*?)(?:\n|$)"),
+        "address": extract_field(text, r"(?:स्थायी ठेगाना|Permanent Address)[:\s]*(.*?)(?:\n|$)"),
+        "spouse_name": extract_field(text, r"(?:पति/पत्नीको नाम|Spouse's Name)[:\s]*(.*?)(?:\n|$)"),
+        "issue_date": extract_field(text, r"(?:जारी मिति|Issue Date)[:\s]*(.*?)(?:\n|$)"),
+        "authority": extract_field(text, r"(?:जारी गर्ने अधिकारी|Issuing Authority)[:\s]*(.*?)(?:\n|$)"),
     }
+    # Remove any duplicate label in Citizenship Number if present.
+    extracted["citizenship_no"] = re.sub(r"^(?:नागरिकता नं\s*[:\-]\s*)", "", extracted["citizenship_no"])
 
     return template.format(**extracted)
 
@@ -447,21 +415,16 @@ def extract_field(text, pattern):
 st.title("Nepali Citizenship Document Scanner")
 st.write("Upload both sides of your citizenship document")
 
-# File uploaders
 col1, col2 = st.columns(2)
 with col1:
-    front_file = st.file_uploader(
-        "Front side", type=["jpg", "jpeg", "png"], key="front"
-    )
+    front_file = st.file_uploader("Front side", type=["jpg", "jpeg", "png"], key="front")
 with col2:
     back_file = st.file_uploader("Back side", type=["jpg", "jpeg", "png"], key="back")
 
 if front_file and back_file:
-    # Load images
     front_image = Image.open(front_file)
     back_image = Image.open(back_file)
 
-    # Display original images
     st.subheader("Uploaded Documents")
     col1, col2 = st.columns(2)
     with col1:
@@ -469,10 +432,20 @@ if front_file and back_file:
     with col2:
         st.image(back_image, caption="Back Side", use_container_width=True)
 
-    # Process images when button is clicked
     if st.button("Extract Information"):
         with st.spinner("Processing images..."):
-            # Preprocess images
+            # Display labeled images
+            labeled_front, flag_front, aspect_front = detect_and_label_citizenship_document(front_image, side="front")
+            labeled_back, flag_back, aspect_back = detect_and_label_citizenship_document(back_image, side="back")
+
+            st.subheader("Labeled Documents")
+            col1, col2 = st.columns(2)
+            with col1:
+                st.image(labeled_front, caption="Labeled Front Side", use_container_width=True)
+            with col2:
+                st.image(labeled_back, caption="Labeled Back Side", use_container_width=True)
+
+            # Preprocess images for text extraction
             front_cv = cv2.cvtColor(np.array(front_image), cv2.COLOR_RGB2BGR)
             back_cv = cv2.cvtColor(np.array(back_image), cv2.COLOR_RGB2BGR)
 
@@ -483,7 +456,7 @@ if front_file and back_file:
                 cv2.cvtColor(preprocess_image(back_cv), cv2.COLOR_BGR2RGB)
             )
 
-            # Create prompt for Gemini
+            # Create prompt for Gemini with processed images
             prompt = [
                 "Extract the following information from this Nepali citizenship document:",
                 "- Full Name (नाम थर)",
@@ -503,23 +476,19 @@ if front_file and back_file:
             ]
 
             try:
-                # Get response from Gemini
                 response = model.generate_content(prompt)
 
                 if response and response.text:
-                    # Format and display extracted information
                     st.subheader("Extracted Information")
                     formatted_text = format_extracted_text(response.text)
                     st.markdown(formatted_text)
 
-                    # Add download button
                     st.download_button(
                         "Download as Text",
-                        formatted_text,  # Use formatted text instead of raw text
+                        formatted_text,
                         file_name="citizenship_data.txt",
                     )
                 else:
                     st.error("No information could be extracted")
             except Exception as e:
                 st.error(f"Error: {str(e)}")
-
