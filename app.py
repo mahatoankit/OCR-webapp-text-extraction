@@ -7,6 +7,8 @@ import cv2
 import numpy as np
 import re
 import pytesseract
+from database import CitizenshipDatabase
+import datetime
 
 # Load environment variables
 load_dotenv()
@@ -17,6 +19,8 @@ model = genai.GenerativeModel("gemini-2.0-flash")
 
 # Target aspect ratio for document (1.41:1 is close to A4)
 TARGET_ASPECT_RATIO = 1.41
+
+db = CitizenshipDatabase()
 
 
 def check_and_correct_orientation(img):
@@ -43,7 +47,7 @@ def check_and_correct_orientation(img):
             height, width = img.shape[:2]
             current_ratio = width / height
     except Exception as e:
-        st.warning(f"Could not detect orientation using Tesseract: {e}")
+        st.warning("Could not automatically detect document orientation")
 
     # If image is in portrait mode but should be landscape (width < height)
     if width < height:
@@ -108,10 +112,10 @@ def preprocess_image(img):
     return cv2.cvtColor(enhanced, cv2.COLOR_GRAY2BGR)
 
 
-# 1. Remove Issue Date from front page fields
+# 1. First, reduce the padding value
 def calculate_field_positions(width, height):
-    # Add some padding to field boxes
-    padding = 0.02
+    # Reduce padding for field boxes (from 0.02 to 0.01)
+    padding = 0.01
 
     # Complete definition for all fields on the front side (removing Issue Date)
     return {
@@ -182,10 +186,10 @@ def calculate_field_positions(width, height):
     }
 
 
-# 1. Remove fingerprint from back field positions
+# 2. Also update the back field positions
 def calculate_back_field_positions(width, height):
-    # Add some padding to field boxes
-    padding = 0.02
+    # Reduce padding for field boxes (from 0.02 to 0.01)
+    padding = 0.01
 
     # Updated back fields without fingerprint
     return {
@@ -221,14 +225,24 @@ def detect_and_label_citizenship_document(image, side="front"):
     img = cv2.cvtColor(np.array(image), cv2.COLOR_RGB2BGR)
     img = preprocess_image(img)
 
+    # Check if image is mostly blank/empty
+    gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+    if cv2.mean(gray)[0] > 240:  # If image is mostly white
+        st.warning(f"The {side} image appears to be blank or empty.")
+        return image, False, None
+
+    # Check if image has enough text content
+    text = pytesseract.image_to_string(img)
+    if len(text.strip()) < 10:  # Less than 10 chars of text
+        st.warning(f"The {side} image doesn't appear to contain enough text content.")
+        return image, False, None
+
+    # Continue with existing processing...
+    # ...
+
     # Save the preprocessed dimensions for later reference
     preprocessed_height, preprocessed_width = img.shape[:2]
     aspect_ratio = preprocessed_width / preprocessed_height
-
-    # Display aspect ratio information
-    st.info(
-        f"Preprocessed image dimensions: {preprocessed_width}x{preprocessed_height}, Aspect ratio: {aspect_ratio:.2f}:1"
-    )
 
     gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
     # Increase kernel size for better noise reduction
@@ -257,6 +271,28 @@ def detect_and_label_citizenship_document(image, side="front"):
         back_fields = calculate_back_field_positions(width, height)
 
         fields = front_fields if side == "front" else back_fields
+
+        # Verify field content before labeling
+        valid_fields = {}
+        for field, positions in fields.items():
+            x1, y1 = positions["box_start"]
+            x2, y2 = positions["box_end"]
+
+            # Extract just this field area
+            field_img = gray[y1:y2, x1:x2]
+
+            # Check if field area has text-like content
+            edges = cv2.Canny(field_img, 30, 200)
+            contours, _ = cv2.findContours(
+                edges, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE
+            )
+
+            # Only include fields with sufficient content
+            if len(contours) > 5:  # A reasonable number of contours indicates text
+                valid_fields[field] = positions
+
+        # Only label fields that passed the content check
+        fields = valid_fields
 
         # Draw labels and boxes with unicode font support
         for field, positions in fields.items():
@@ -348,14 +384,16 @@ def highlight_extracted_fields(front_image, back_image):
                 (0, 255, 0),
                 -1,
             )
-            alpha = 0.4
+            # Reduce alpha to make highlight more transparent (from 0.4 to 0.3)
+            alpha = 0.3
             cv2.addWeighted(overlay, alpha, img, 1 - alpha, 0, img)
+            # Make border thinner (from 2 to 1)
             cv2.rectangle(
                 img,
                 positions["box_start"],
                 positions["box_end"],
                 (0, 0, 255),
-                2,
+                1,
             )
 
     highlighted_front = Image.fromarray(cv2.cvtColor(front_overlay, cv2.COLOR_BGR2RGB))
@@ -365,42 +403,93 @@ def highlight_extracted_fields(front_image, back_image):
 
 
 def format_extracted_text(text):
-    """Format the extracted text into a clean structure"""
+    """Format the extracted text into English section with clean output"""
+    # Extract all fields first
+    extracted = {
+        "full_name": extract_field(text, r"(?:नाम थर|Full Name)[:\s]*(.*?)(?:\n|$)"),
+        "father_name": extract_field(
+            text, r"(?:बुवाको नाम|Father's Name)[:\s]*(.*?)(?:\n|$)"
+        ),
+        "mother_name": extract_field(
+            text, r"(?:आमाको नाम|Mother's Name)[:\s]*(.*?)(?:\n|$)"
+        ),
+        "dob": extract_field(text, r"(?:जन्म मिति|Date of Birth)[:\s]*(.*?)(?:\n|$)"),
+        "birth_place": extract_field(
+            text, r"(?:जन्म स्थान|Place of Birth)[:\s]*(.*?)(?:\n|$)"
+        ),
+        "gender": extract_field(text, r"(?:लिङ्ग|Gender)[:\s]*(.*?)(?:\n|$)"),
+        "citizenship_no": extract_field(
+            text, r"(?:नागरिकता नं|Citizenship Number)[:\s]*(.*?)(?:\n|$)"
+        ),
+        "address": extract_field(
+            text, r"(?:स्थायी ठेगाना|Permanent Address)[:\s]*(.*?)(?:\n|$)"
+        ),
+        "spouse_name": extract_field(
+            text, r"(?:पति/पत्नीको नाम|Spouse's Name)[:\s]*(.*?)(?:\n|$)"
+        ),
+        "issue_date": extract_field(
+            text, r"(?:जारी मिति|Issue Date)[:\s]*(.*?)(?:\n|$)"
+        ),
+        "authority": extract_field(
+            text, r"(?:जारी गर्ने अधिकारी|Issuing Authority)[:\s]*(.*?)(?:\n|$)"
+        ),
+    }
+
+    # Remove any duplicate label in Citizenship Number if present
+    extracted["citizenship_no"] = re.sub(
+        r"^(?:नागरिकता नं\s*[:\-]\s*)", "", extracted["citizenship_no"]
+    )
+
+    # Helper function to detect if text contains Nepali characters
+    def contains_nepali(text):
+        nepali_unicode_range = range(0x0900, 0x097F)  # Devanagari Unicode range
+        return any(ord(char) in nepali_unicode_range for char in text)
+
+    # Process fields to extract English content and note where translation is needed
+    english_data = {}
+
+    for field, value in extracted.items():
+        if value == "Not found":
+            english_data[field] = "Not found"
+            continue
+
+        # If the field contains Nepali text
+        if contains_nepali(value):
+            # Extract any English text that might be present
+            english_parts = re.sub(r"[\u0900-\u097F]+", "", value).strip()
+
+            if english_parts:
+                # If we have some English text, use that
+                english_data[field] = english_parts
+            else:
+                # If only Nepali text, indicate translation needed
+                english_data[field] = "[Nepali text needs translation]"
+        else:
+            # Field is already in English
+            english_data[field] = value
+
+    # Create a clean template without markdown for display and download
     template = """
 Citizenship Certificate Information
 
-Personal Details:
-- Full Name (नाम थर): {full_name}
-- Father's Name (बुवाको नाम): {father_name}
-- Mother's Name (आमाको नाम): {mother_name}
-- Gender (लिङ्ग): {gender}
+Personal Details
+Full Name: {full_name}
+Father's Name: {father_name}
+Mother's Name: {mother_name}
+Gender: {gender}
 
-Document Details:
-- Citizenship Number (नागरिकता नं): {citizenship_no}
-- Permanent Address (स्थायी ठेगाना): {address}
-- Date of Birth (जन्म मिति): {dob}
-- Place of Birth (जन्म स्थान): {birth_place}
-- Issue Date (जारी मिति): {issue_date}
-- Issuing Authority (जारी गर्ने अधिकारी): {authority}
-- Spouse's Name (पति/पत्नीको नाम): {spouse_name}
+Document Details
+Citizenship Number: {citizenship_no}
+Permanent Address: {address}
+Date of Birth: {dob}
+Place of Birth: {birth_place}
+Issue Date: {issue_date}
+Issuing Authority: {authority}
+Spouse's Name: {spouse_name}
 """
-    extracted = {
-        "full_name": extract_field(text, r"(?:नाम थर|Full Name)[:\s]*(.*?)(?:\n|$)"),
-        "father_name": extract_field(text, r"(?:बुवाको नाम|Father's Name)[:\s]*(.*?)(?:\n|$)"),
-        "mother_name": extract_field(text, r"(?:आमाको नाम|Mother's Name)[:\s]*(.*?)(?:\n|$)"),
-        "dob": extract_field(text, r"(?:जन्म मिति|Date of Birth)[:\s]*(.*?)(?:\n|$)"),
-        "birth_place": extract_field(text, r"(?:जन्म स्थान|Place of Birth)[:\s]*(.*?)(?:\n|$)"),
-        "gender": extract_field(text, r"(?:लिङ्ग|Gender)[:\s]*(.*?)(?:\n|$)"),
-        "citizenship_no": extract_field(text, r"(?:नागरिकता नं|Citizenship Number)[:\s]*(.*?)(?:\n|$)"),
-        "address": extract_field(text, r"(?:स्थायी ठेगाना|Permanent Address)[:\s]*(.*?)(?:\n|$)"),
-        "spouse_name": extract_field(text, r"(?:पति/पत्नीको नाम|Spouse's Name)[:\s]*(.*?)(?:\n|$)"),
-        "issue_date": extract_field(text, r"(?:जारी मिति|Issue Date)[:\s]*(.*?)(?:\n|$)"),
-        "authority": extract_field(text, r"(?:जारी गर्ने अधिकारी|Issuing Authority)[:\s]*(.*?)(?:\n|$)"),
-    }
-    # Remove any duplicate label in Citizenship Number if present.
-    extracted["citizenship_no"] = re.sub(r"^(?:नागरिकता नं\s*[:\-]\s*)", "", extracted["citizenship_no"])
 
-    return template.format(**extracted)
+    # Return formatted text with English data
+    return template.format(**english_data)
 
 
 def extract_field(text, pattern):
@@ -412,83 +501,178 @@ def extract_field(text, pattern):
 
 
 # Update Streamlit interface
-st.title("Nepali Citizenship Document Scanner")
-st.write("Upload both sides of your citizenship document")
+tab1, tab2 = st.tabs(["Document Scanner", "View Records"])
 
-col1, col2 = st.columns(2)
-with col1:
-    front_file = st.file_uploader("Front side", type=["jpg", "jpeg", "png"], key="front")
-with col2:
-    back_file = st.file_uploader("Back side", type=["jpg", "jpeg", "png"], key="back")
+with tab1:
+    # Existing scanner interface
+    st.title("Nepali Citizenship Document Scanner")
+    st.write("Upload both sides of your citizenship document")
 
-if front_file and back_file:
-    front_image = Image.open(front_file)
-    back_image = Image.open(back_file)
-
-    st.subheader("Uploaded Documents")
     col1, col2 = st.columns(2)
     with col1:
-        st.image(front_image, caption="Front Side", use_container_width=True)
+        front_file = st.file_uploader(
+            "Front side", type=["jpg", "jpeg", "png"], key="front"
+        )
     with col2:
-        st.image(back_image, caption="Back Side", use_container_width=True)
+        back_file = st.file_uploader(
+            "Back side", type=["jpg", "jpeg", "png"], key="back"
+        )
 
-    if st.button("Extract Information"):
-        with st.spinner("Processing images..."):
-            # Display labeled images
-            labeled_front, flag_front, aspect_front = detect_and_label_citizenship_document(front_image, side="front")
-            labeled_back, flag_back, aspect_back = detect_and_label_citizenship_document(back_image, side="back")
+    # Keep all your existing document processing code here
+    if front_file and back_file:
+        front_image = Image.open(front_file)
+        back_image = Image.open(back_file)
 
-            st.subheader("Labeled Documents")
-            col1, col2 = st.columns(2)
-            with col1:
-                st.image(labeled_front, caption="Labeled Front Side", use_container_width=True)
-            with col2:
-                st.image(labeled_back, caption="Labeled Back Side", use_container_width=True)
+        st.subheader("Uploaded Documents")
+        col1, col2 = st.columns(2)
+        with col1:
+            st.image(front_image, caption="Front Side", use_container_width=True)
+        with col2:
+            st.image(back_image, caption="Back Side", use_container_width=True)
 
-            # Preprocess images for text extraction
-            front_cv = cv2.cvtColor(np.array(front_image), cv2.COLOR_RGB2BGR)
-            back_cv = cv2.cvtColor(np.array(back_image), cv2.COLOR_RGB2BGR)
+        if st.button("Extract Information"):
+            with st.spinner("Processing images..."):
+                # Display labeled images
+                labeled_front, flag_front, aspect_front = (
+                    detect_and_label_citizenship_document(front_image, side="front")
+                )
+                labeled_back, flag_back, aspect_back = (
+                    detect_and_label_citizenship_document(back_image, side="back")
+                )
 
-            front_processed = Image.fromarray(
-                cv2.cvtColor(preprocess_image(front_cv), cv2.COLOR_BGR2RGB)
-            )
-            back_processed = Image.fromarray(
-                cv2.cvtColor(preprocess_image(back_cv), cv2.COLOR_BGR2RGB)
-            )
-
-            # Create prompt for Gemini with processed images
-            prompt = [
-                "Extract the following information from this Nepali citizenship document:",
-                "- Full Name (नाम थर)",
-                "- Father's Name (बुवाको नाम)",
-                "- Mother's Name (आमाको नाम)",
-                "- Date of Birth (जन्म मिति)",
-                "- Place of Birth (जन्म स्थान)",
-                "- Gender (लिङ्ग)",
-                "- Citizenship Number (नागरिकता नं)",
-                "- Permanent Address (स्थायी ठेगाना)",
-                "- Spouse's Name (पति/पत्नीको नाम)",
-                "- Issue Date (जारी मिति)",
-                "- Issuing Authority (जारी गर्ने अधिकारी)",
-                "Provide both Nepali and English text when available.",
-                front_processed,
-                back_processed,
-            ]
-
-            try:
-                response = model.generate_content(prompt)
-
-                if response and response.text:
-                    st.subheader("Extracted Information")
-                    formatted_text = format_extracted_text(response.text)
-                    st.markdown(formatted_text)
-
-                    st.download_button(
-                        "Download as Text",
-                        formatted_text,
-                        file_name="citizenship_data.txt",
+                st.subheader("Labeled Documents")
+                col1, col2 = st.columns(2)
+                with col1:
+                    st.image(
+                        labeled_front,
+                        caption="Labeled Front Side",
+                        use_container_width=True,
                     )
-                else:
-                    st.error("No information could be extracted")
-            except Exception as e:
-                st.error(f"Error: {str(e)}")
+                with col2:
+                    st.image(
+                        labeled_back,
+                        caption="Labeled Back Side",
+                        use_container_width=True,
+                    )
+
+                # Preprocess images for text extraction
+                front_cv = cv2.cvtColor(np.array(front_image), cv2.COLOR_RGB2BGR)
+                back_cv = cv2.cvtColor(np.array(back_image), cv2.COLOR_RGB2BGR)
+
+                front_processed = Image.fromarray(
+                    cv2.cvtColor(preprocess_image(front_cv), cv2.COLOR_BGR2RGB)
+                )
+                back_processed = Image.fromarray(
+                    cv2.cvtColor(preprocess_image(back_cv), cv2.COLOR_BGR2RGB)
+                )
+
+                # Create prompt for Gemini with processed images
+                prompt = [
+                    "Extract the following information from this Nepali citizenship document:",
+                    "- Full Name (नाम थर)",
+                    "- Father's Name (बुवाको नाम)",
+                    "- Mother's Name (आमाको नाम)",
+                    "- Date of Birth (जन्म मिति)",
+                    "- Place of Birth (जन्म स्थान)",
+                    "- Gender (लिङ्ग)",
+                    "- Citizenship Number (नागरिकता नं)",
+                    "- Permanent Address (स्थायी ठेगाना)",
+                    "- Spouse's Name (पति/पत्नीको नाम)",
+                    "- Issue Date (जारी मिति)",
+                    "- Issuing Authority (जारी गर्ने अधिकारी)",
+                    "Provide both Nepali and English text when available.",
+                    front_processed,
+                    back_processed,
+                ]
+
+                try:
+                    response = model.generate_content(prompt)
+
+                    if response and response.text:
+                        st.subheader("Extracted Information")
+                        formatted_text = format_extracted_text(response.text)
+
+                        # Display text as before
+                        display_text = formatted_text.replace(
+                            "Personal Details", "### Personal Details"
+                        )
+                        display_text = display_text.replace(
+                            "Document Details", "### Document Details"
+                        )
+                        display_text = re.sub(
+                            r"^(.*?): ", r"- **\1:** ", display_text, flags=re.MULTILINE
+                        )
+                        st.markdown(display_text)
+
+                        # Parse data for database
+                        data_lines = formatted_text.strip().split("\n")
+                        data_dict = {}
+
+                        for line in data_lines:
+                            if ": " in line:
+                                field, value = line.split(": ", 1)
+                                field = field.strip().lower().replace(" ", "_")
+                                # Handle the field name difference
+                                if field == "permanent_address":
+                                    field = "address"
+                                data_dict[field] = value.strip()
+
+                        # Add Save and Download buttons side by side
+                        col1, col2 = st.columns(2)
+                        with col1:
+                            if st.button("Save to Database"):
+                                success, message = db.save_record(data_dict)
+                                if success:
+                                    st.success(message)
+                                else:
+                                    st.error(message)
+
+                        with col2:
+                            st.download_button(
+                                "Download as Text",
+                                formatted_text,
+                                file_name="citizenship_data.txt",
+                            )
+                    else:
+                        st.error("No information could be extracted")
+                except Exception as e:
+                    st.error(f"Error: {str(e)}")
+
+with tab2:
+    # Records view tab
+    st.title("Saved Citizenship Records")
+
+    records = db.get_all_records()
+
+    if records:
+        for record in records:
+            record_id = record[0]
+            name = record[1]
+            citizenship_no = record[2]
+            scan_date = record[3]
+
+            with st.expander(f"{name} - {citizenship_no}"):
+                if st.button("View Details", key=f"view_{record_id}"):
+                    record_details = db.get_record_by_id(record_id)
+                    if record_details:
+                        col1, col2 = st.columns(2)
+
+                        with col1:
+                            st.write("### Personal Details")
+                            st.write(f"**Full Name:** {record_details[1]}")
+                            st.write(f"**Father's Name:** {record_details[2]}")
+                            st.write(f"**Mother's Name:** {record_details[3]}")
+                            st.write(f"**Gender:** {record_details[4]}")
+                            st.write(f"**Spouse Name:** {record_details[11]}")
+
+                        with col2:
+                            st.write("### Document Details")
+                            st.write(f"**Citizenship No:** {record_details[5]}")
+                            st.write(f"**Address:** {record_details[6]}")
+                            st.write(f"**Date of Birth:** {record_details[7]}")
+                            st.write(f"**Place of Birth:** {record_details[8]}")
+                            st.write(f"**Issue Date:** {record_details[9]}")
+                            st.write(f"**Authority:** {record_details[10]}")
+                            st.write(f"**Scan Date:** {record_details[12]}")
+    else:
+        st.info("No citizenship records found in the database")
