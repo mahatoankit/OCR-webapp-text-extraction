@@ -53,7 +53,7 @@ def convert_image_to_bytes(image):
 
 def label_citizenship_fields(image_bytes, is_front=True):
     """
-    Label the fields on citizenship image
+    Label the fields on citizenship image with more precise fixed coordinates.
 
     Args:
         image_bytes: Raw image bytes
@@ -65,50 +65,145 @@ def label_citizenship_fields(image_bytes, is_front=True):
     # Convert bytes to PIL Image
     nparr = np.frombuffer(image_bytes, np.uint8)
     img_cv = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
-    img = Image.fromarray(cv2.cvtColor(img_cv, cv2.COLOR_BGR2RGB))
 
+    # Apply basic preprocessing
+    gray = cv2.cvtColor(img_cv, cv2.COLOR_BGR2GRAY)
+    clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
+    enhanced = clahe.apply(gray)
+    img_cv = cv2.cvtColor(enhanced, cv2.COLOR_GRAY2BGR)
+
+    img = Image.fromarray(cv2.cvtColor(img_cv, cv2.COLOR_BGR2RGB))
     draw = ImageDraw.Draw(img)
 
-    # Define field positions based on relative coordinates
-    # These are approximate and may need adjustment for different images
+    # Get image dimensions
     width, height = img.size
 
+    # Get field positions based on side (front/back)
     if is_front:
-        fields = {
-            "Full Name": (width * 0.5, height * 0.3),
-            "Citizenship No": (width * 0.3, height * 0.2),
-            "Date of Birth": (width * 0.7, height * 0.4),
-            "Father's Name": (width * 0.5, height * 0.5),
-            "Mother's Name": (width * 0.5, height * 0.6),
-            "Issue Date": (width * 0.7, height * 0.7),
-        }
+        field_positions = calculate_field_positions(width, height)
     else:
-        fields = {
-            "Photo Area": (width * 0.2, height * 0.25),
-            "Address": (width * 0.6, height * 0.3),
-            "Issuing Authority": (width * 0.6, height * 0.5),
-            "Spouse Name": (width * 0.5, height * 0.6),
-            "Fingerprint": (width * 0.2, height * 0.7),
-        }
+        field_positions = calculate_back_field_positions(width, height)
 
     # Draw boxes and labels for each field
-    for field_name, (x, y) in fields.items():
-        # Calculate box dimensions
-        box_width = width * 0.35
-        box_height = height * 0.08
+    try:
+        # Try to load a font, use default if not available
+        font = ImageFont.truetype("DejaVuSans.ttf", 16)
+    except IOError:
+        font = ImageFont.load_default()
 
+    for field_name, positions in field_positions.items():
         # Draw rectangle
-        rect_shape = [
-            (x - box_width / 2, y - box_height / 2),
-            (x + box_width / 2, y + box_height / 2),
-        ]
-        draw.rectangle(rect_shape, outline=(0, 255, 0), width=2)  # Green outline
+        draw.rectangle(
+            [positions["box_start"], positions["box_end"]], outline=(0, 200, 0), width=2
+        )
 
         # Add text label
-        draw.text(
-            (x - box_width / 2 + 5, y - box_height / 2 - 15),
-            field_name,
-            fill=(255, 0, 0),
-        )  # Red text
+        draw.text(positions["label_pos"], field_name, fill=(255, 0, 0), font=font)
 
     return img
+
+
+def calculate_field_positions(width, height):
+    """Calculate fixed positions for front side fields."""
+    # Padding to make boxes slightly larger than the text area
+    padding = 0.01
+
+    return {
+        "Full Name": {
+            "label_pos": (int(width * 0.1), int(height * 0.15)),
+            "box_start": (
+                int(width * (0.25 - padding)),
+                int(height * (0.13 - padding)),
+            ),
+            "box_end": (int(width * (0.9 + padding)), int(height * (0.20 + padding))),
+        },
+        
+        "Father's Name": {
+            "label_pos": (int(width * 0.1), int(height * 0.25)),
+            "box_start": (
+                int(width * (0.25 - padding)),
+                int(height * (0.23 - padding)),
+            ),
+            "box_end": (int(width * (0.9 + padding)), int(height * (0.30 + padding))),
+        },
+        "Mother's Name": {
+            "label_pos": (int(width * 0.1), int(height * 0.35)),
+            "box_start": (
+                int(width * (0.25 - padding)),
+                int(height * (0.33 - padding)),
+            ),
+            "box_end": (int(width * (0.9 + padding)), int(height * (0.40 + padding))),
+        },
+        "Date of Birth": {
+            "label_pos": (int(width * 0.1), int(height * 0.45)),
+            "box_start": (
+                int(width * (0.25 - padding)),
+                int(height * (0.43 - padding)),
+            ),
+            "box_end": (int(width * (0.9 + padding)), int(height * (0.50 + padding))),
+        },
+        "Place of Birth": {
+            "label_pos": (int(width * 0.1), int(height * 0.55)),
+            "box_start": (
+                int(width * (0.25 - padding)),
+                int(height * (0.53 - padding)),
+            ),
+            "box_end": (int(width * (0.9 + padding)), int(height * (0.60 + padding))),
+        },
+        "Citizenship Number": {
+            "label_pos": (int(width * 0.1), int(height * 0.75)),
+            "box_start": (
+                int(width * (0.25 - padding)),
+                int(height * (0.73 - padding)),
+            ),
+            "box_end": (int(width * (0.9 + padding)), int(height * (0.80 + padding))),
+        },
+        "Permanent Address": {
+            "label_pos": (int(width * 0.1), int(height * 0.85)),
+            "box_start": (
+                int(width * (0.25 - padding)),
+                int(height * (0.83 - padding)),
+            ),
+            "box_end": (int(width * (0.9 + padding)), int(height * (0.90 + padding))),
+        },
+    }
+
+
+def calculate_back_field_positions(width, height):
+    """Calculate fixed positions for back side fields."""
+    padding = 0.01
+
+    return {
+        "Spouse's Name": {
+            "label_pos": (int(width * 0.1), int(height * 0.15)),
+            "box_start": (
+                int(width * (0.25 - padding)),
+                int(height * (0.13 - padding)),
+            ),
+            "box_end": (int(width * (0.9 + padding)), int(height * (0.25 + padding))),
+        },
+        "Issue Date": {
+            "label_pos": (int(width * 0.1), int(height * 0.35)),
+            "box_start": (
+                int(width * (0.25 - padding)),
+                int(height * (0.33 - padding)),
+            ),
+            "box_end": (int(width * (0.6 + padding)), int(height * (0.40 + padding))),
+        },
+        "Issuing Authority": {
+            "label_pos": (int(width * 0.1), int(height * 0.55)),
+            "box_start": (
+                int(width * (0.25 - padding)),
+                int(height * (0.53 - padding)),
+            ),
+            "box_end": (int(width * (0.9 + padding)), int(height * (0.65 + padding))),
+        },
+        "Office": {
+            "label_pos": (int(width * 0.1), int(height * 0.70)),
+            "box_start": (
+                int(width * (0.25 - padding)),
+                int(height * (0.68 - padding)),
+            ),
+            "box_end": (int(width * (0.9 + padding)), int(height * (0.75 + padding))),
+        },
+    }

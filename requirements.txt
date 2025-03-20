@@ -1,7 +1,7 @@
-streamlit
-Pillow
-google-generativeai
-python-dotenv
-jsonschema
-opencv-python
-numpy
+numpy==2.2.4
+opencv_python==4.11.0.86
+Pillow==11.1.0
+protobuf==6.30.1
+psycopg2==2.9.10
+python-dotenv==1.0.1
+streamlit==1.43.2
