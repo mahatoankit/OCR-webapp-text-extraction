@@ -5,16 +5,6 @@ import io
 
 
 def preprocess_image(image_bytes):
-    """
-    Preprocess the image to enhance text visibility
-
-    Args:
-        image_bytes: Raw image bytes
-
-    Returns:
-        PIL Image: Preprocessed image
-    """
-    # Convert bytes to numpy array
     nparr = np.frombuffer(image_bytes, np.uint8)
     img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
 
@@ -52,17 +42,7 @@ def convert_image_to_bytes(image):
 
 
 def label_citizenship_fields(image_bytes, is_front=True):
-    """
-    Label the fields on citizenship image with more precise fixed coordinates.
 
-    Args:
-        image_bytes: Raw image bytes
-        is_front: Boolean indicating if it's front side
-
-    Returns:
-        PIL Image: Image with labeled fields
-    """
-    # Convert bytes to PIL Image
     nparr = np.frombuffer(image_bytes, np.uint8)
     img_cv = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
 
@@ -78,7 +58,6 @@ def label_citizenship_fields(image_bytes, is_front=True):
     # Get image dimensions
     width, height = img.size
 
-    # Get field positions based on side (front/back)
     if is_front:
         field_positions = calculate_field_positions(width, height)
     else:
