@@ -1,7 +1,7 @@
 streamlit
 Pillow
+google-generativeai
 python-dotenv
+jsonschema
 opencv-python
 numpy
-pytesseract
-google-generativeai
