@@ -63,9 +63,7 @@ def label_citizenship_fields(image_bytes, is_front=True):
     else:
         field_positions = calculate_back_field_positions(width, height)
 
-    # Draw boxes and labels for each field
     try:
-        # Try to load a font, use default if not available
         font = ImageFont.truetype("DejaVuSans.ttf", 16)
     except IOError:
         font = ImageFont.load_default()
@@ -89,62 +87,79 @@ def calculate_field_positions(width, height):
 
     return {
         "Full Name": {
-            "label_pos": (int(width * 0.1), int(height * 0.15)),
+            "label_pos": (int(410), int(360)),
             "box_start": (
-                int(width * (0.25 - padding)),
-                int(height * (0.13 - padding)),
+                int(410),
+                int(380),
             ),
-            "box_end": (int(width * (0.9 + padding)), int(height * (0.20 + padding))),
+            "box_end": (int(980), int(430)),
         },
         
         "Father's Name": {
-            "label_pos": (int(width * 0.1), int(height * 0.25)),
+            "label_pos": (int(410), int(700)),
             "box_start": (
-                int(width * (0.25 - padding)),
-                int(height * (0.23 - padding)),
+                int(410),
+                int(720),
             ),
-            "box_end": (int(width * (0.9 + padding)), int(height * (0.30 + padding))),
+            "box_end": (int(980), int(765)),
         },
         "Mother's Name": {
-            "label_pos": (int(width * 0.1), int(height * 0.35)),
+            "label_pos": (int(410), int(800)),
             "box_start": (
-                int(width * (0.25 - padding)),
-                int(height * (0.33 - padding)),
+                int(410),
+                int(820),
             ),
-            "box_end": (int(width * (0.9 + padding)), int(height * (0.40 + padding))),
+            "box_end": (int(1100), int(870)),
         },
         "Date of Birth": {
-            "label_pos": (int(width * 0.1), int(height * 0.45)),
+            "label_pos": (int(410), int(630)),
             "box_start": (
-                int(width * (0.25 - padding)),
-                int(height * (0.43 - padding)),
+                int(410),
+                int(650),
             ),
-            "box_end": (int(width * (0.9 + padding)), int(height * (0.50 + padding))),
-        },
-        "Place of Birth": {
-            "label_pos": (int(width * 0.1), int(height * 0.55)),
-            "box_start": (
-                int(width * (0.25 - padding)),
-                int(height * (0.53 - padding)),
-            ),
-            "box_end": (int(width * (0.9 + padding)), int(height * (0.60 + padding))),
-        },
-        "Citizenship Number": {
-            "label_pos": (int(width * 0.1), int(height * 0.75)),
-            "box_start": (
-                int(width * (0.25 - padding)),
-                int(height * (0.73 - padding)),
-            ),
-            "box_end": (int(width * (0.9 + padding)), int(height * (0.80 + padding))),
+            "box_end": (int(1250), int(700)),
         },
         "Permanent Address": {
-            "label_pos": (int(width * 0.1), int(height * 0.85)),
+            "label_pos": (int(410), int(515)),
             "box_start": (
-                int(width * (0.25 - padding)),
-                int(height * (0.83 - padding)),
+                int(410),
+                int(535),
             ),
-            "box_end": (int(width * (0.9 + padding)), int(height * (0.90 + padding))),
+            "box_end": (int(1470), int(645)),
         },
+        "Citizenship Number": {
+            "label_pos": (int(190), int(300)),
+            "box_start": (
+                int(190),
+                int(320),
+            ),
+            "box_end": (int(490), int(370)),
+        },
+        "Gender":{
+            "label_pos": (int(1250), int(360)),
+            "box_start": (
+                int(1250),
+                int(380),
+            ),
+            "box_end": (int(1490), int(440)),
+        }
+        ,
+        "Birth place": {
+            "label_pos": (int(410), int(420)),
+            "box_start": (
+                int(410),
+                int(440),
+            ),
+            "box_end": (int(990), int(530)),
+        },
+        "spouse": {
+            "label_pos": (int(410), int(920)),
+            "box_start": (
+                int(410),
+                int(930),
+            ),
+            "box_end": (int(900), int(980)),
+        }
     }
 
 
@@ -153,36 +168,20 @@ def calculate_back_field_positions(width, height):
     padding = 0.01
 
     return {
-        "Spouse's Name": {
-            "label_pos": (int(width * 0.1), int(height * 0.15)),
-            "box_start": (
-                int(width * (0.25 - padding)),
-                int(height * (0.13 - padding)),
-            ),
-            "box_end": (int(width * (0.9 + padding)), int(height * (0.25 + padding))),
-        },
         "Issue Date": {
-            "label_pos": (int(width * 0.1), int(height * 0.35)),
+            "label_pos": (int(830), int(840)),
             "box_start": (
-                int(width * (0.25 - padding)),
-                int(height * (0.33 - padding)),
+                int(830),
+                int(860),
             ),
-            "box_end": (int(width * (0.6 + padding)), int(height * (0.40 + padding))),
+            "box_end": (int(1190), int(920)),
         },
         "Issuing Authority": {
-            "label_pos": (int(width * 0.1), int(height * 0.55)),
+            "label_pos": (int(830), int(900)),
             "box_start": (
-                int(width * (0.25 - padding)),
-                int(height * (0.53 - padding)),
+                int(830),
+                int(920),
             ),
-            "box_end": (int(width * (0.9 + padding)), int(height * (0.65 + padding))),
-        },
-        "Office": {
-            "label_pos": (int(width * 0.1), int(height * 0.70)),
-            "box_start": (
-                int(width * (0.25 - padding)),
-                int(height * (0.68 - padding)),
-            ),
-            "box_end": (int(width * (0.9 + padding)), int(height * (0.75 + padding))),
-        },
+            "box_end": (int(1490), int(1050)),
+        }
     }
