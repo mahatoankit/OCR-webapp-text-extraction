@@ -1,76 +1,156 @@
-# Nepali Citizenship Document Scanner
+# Nepali Citizenship OCR Data Extractor
 
-This repository contains an OCR web application for extracting information from Nepali citizenship documents. It provides two implementations:
-
-- **Google Gemini OCR**: Uses the Gemini model for advanced text extraction. (See `app.py`)
-- **Tesseract OCR**: Uses Tesseract for local OCR processing. (See `tessApp.py`)
+An AI-powered application that extracts information from Nepali citizenship documents using image processing and Google's Gemini model.
 
 ## Features
 
-- **Automatic Orientation Correction**: Detects and rotates image based on text orientation.
-- **Image Preprocessing**: Enhances contrast and reduces noise to improve OCR accuracy.
-- **Region-Based Extraction**: Defines areas on the document for specific fields.
-- **Multi-Language Support**: Extracts text in both Nepali and English.
-- **Visual Feedback**: Highlights extraction regions on the processed images.
-- **Downloadable Output**: Provides an option to download the extracted data as a text file.
-  
+- Upload and process both front and back sides of Nepali citizenship documents
+- Advanced image preprocessing for better text extraction
+- Automatic field detection and labeling
+- Data extraction using Google's Gemini AI model
+- PostgreSQL database integration for data storage
+- User-friendly interface built with Streamlit
+- Export functionality for extracted data
+
+## Technology Stack
+
+- Python 3.x
+- Streamlit
+- OpenCV
+- Google Gemini AI
+- PostgreSQL
+- PIL (Python Imaging Library)
+- psycopg2
+- python-dotenv
+
 ## Installation
 
-### Prerequisites
-
-- Python 3.8 or higher
-- On Linux, install required system packages:
+1. Clone the repository:
 
 ```bash
-sudo apt-get update
-sudo apt-get install poppler-utils tesseract-ocr tesseract-ocr-nep
+git clone <repository-url>
+cd Citizenship_OCR
 ```
 
-### Python Dependencies
-
-Install the required packages:
+2. Create and activate a virtual environment:
 
 ```bash
-pip install streamlit pillow opencv-python numpy pytesseract python-dotenv google-generativeai
+python -m venv venv
+source venv/bin/activate  # On Windows: venv\Scripts\activate
 ```
 
-## Configuration
+3. Install dependencies:
 
-Create a `.env` file in the repository root to store your environment variables, for example:
+```bash
+pip install -r requirements.txt
+```
 
-```env
-GOOGLE_API_KEY=your_google_api_key_here
+4. Set up environment variables in `.env`:
+
+```
+GOOGLE_API_KEY= <your gemini-2.0-flash api key>
+DB_HOST=localhost
+DB_NAME=citizenshipdata
+DB_USER=postgres
+DB_PASS= <database password>
+DB_PORT=5432
+```
+
+## Database Setup
+
+1. Ensure PostgreSQL is installed on your system
+2. Navigate to the database directory:
+
+```bash
+cd database
+```
+
+3. Run the setup script:
+
+```bash
+psql -U postgres -f setup.sql
+```
+
+4. Verify the setup:
+
+```bash
+psql -U postgres -d citizenshipdata -c "\dt"
+```
+
+You should see the `citizenship_records` table listed.
+
+## Project Structure
+
+```
+Citizenship_OCR/
+├── src/
+│   ├── app.py              # Main Streamlit application
+│   ├── database.py         # Database operations
+│   ├── utils/
+│   │   ├── data_extraction.py    # AI extraction logic
+│   │   ├── image_processing.py   # Image preprocessing
+│   ├── config/
+│   │   └── settings.py     # Configuration settings
+├── requirements.txt
+└── README.md
 ```
 
 ## Usage
 
-### Google Gemini OCR Application (`app.py`)
-
-Run the application with:
+1. Start the application:
 
 ```bash
+cd src
 streamlit run app.py
 ```
 
-Upload both the front and back images of the citizenship document. The app will use the Google Gemini API to extract the relevant information.
+2. Upload citizenship document images:
 
-### Tesseract OCR Application (`tessApp.py`)
+   - Front side of the citizenship
+   - Back side of the citizenship
 
-For a local OCR solution powered by Tesseract:
+3. View different processing stages:
 
-```bash
-streamlit run tessApp.py
-```
+   - Original Images
+   - Preprocessed Images
+   - Labeled Fields
 
-This version is optimized solely for image-based processing using Tesseract and is ideal if you prefer a local approach or do not have access to the Gemini API.
+4. Extract information using the "Extract Information" button
 
-## Repository Structure
+5. View and download the extracted data:
+   - Data is automatically saved to the database
+   - Option to download as JSON
+   - View all saved records
 
-```
-OCR-webapp-text-extraction/
-├── app.py             # Application using the Google Gemini API.
-├── tessApp.py         # Application using Tesseract OCR.
-├── .env               # Environment variables file (create manually).
-├── requirements.txt   # Python dependencies (optional).
-└── README.md          # This file.
-```
+## Features in Detail
+
+### Image Processing
+
+- Grayscale conversion
+- Adaptive thresholding
+- Noise removal
+- Edge enhancement
+- Field detection and labeling(using fixed co-ordinates)
+
+### Data Extraction
+
+- Personal information
+- Document details
+- Family information
+- Address details
+- Issue dates and authority information
+
+### Database Operations
+
+- Automatic data storage
+- Record viewing and retrieval
+- Unique citizenship number tracking
+- Timestamp-based record management
+
+## Contributing
+
+1. Fork the repository
+2. Create a feature branch
+3. Commit your changes
+4. Push to the branch
+5. Create a Pull Request
